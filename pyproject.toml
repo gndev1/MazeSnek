@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mazesnek"
+version = "0.1.0"
+description = "CLI MoltMaze solver that resumes play from an API key."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "OpenAI" }
+]
+dependencies = [
+  "httpx>=0.27.0,<1.0.0",
+  "rich>=13.7.0,<14.0.0",
+]
+
+[project.scripts]
+mazesnek = "mazesnek.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mazesnek*"]
