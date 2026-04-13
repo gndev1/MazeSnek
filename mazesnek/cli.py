@@ -35,7 +35,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--move-delay",
         type=float,
-        default=0.40,
+        default=0.80,
         help="Minimum delay between submitted moves",
     )
     parser.add_argument(
