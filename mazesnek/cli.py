@@ -3,136 +3,149 @@ from __future__ import annotations
 import argparse
 import sys
 import time
+from typing import Any
 
-import httpx
-from rich.console import Console
-from rich.pretty import Pretty
-
-from mazesnek.client import MoltMazeClient
-from mazesnek.pathfinding import bfs_next_direction
-from mazesnek.solver import solve_expression
-from mazesnek.state import ParsedState, StateParseError, parse_state
-
-console = Console()
+from .client import MoltMazeClient
+from .solver import solve_equation
+from .state import ParsedState, apply_direction, choose_direction, parse_state
 
 
-def choose_direction(state: ParsedState) -> str:
-    direction = bfs_next_direction(state.maze, state.position, state.goal)
-    if direction and direction in state.actions:
-        return direction
-
-    for fallback in ("up", "down", "left", "right"):
-        if fallback in state.actions:
-            return fallback
-
-    raise RuntimeError("No valid direction found")
+def _print_debug(title: str, payload: Any) -> None:
+    print(title)
+    print(payload)
 
 
-
-def choose_answer(state: ParsedState) -> tuple[str, str, str]:
-    direction = choose_direction(state)
-    expr = state.actions[direction]
-    answer = solve_expression(expr)
-    return direction, expr, answer
-
-
-
-def build_parser() -> argparse.ArgumentParser:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mazesnek",
-        description="Resume or start a MoltMaze run and solve it from the command line.",
+        description="MazeSnek MoltMaze bot runner",
     )
-    parser.add_argument("apikey", help="MoltMaze API key")
+    parser.add_argument("api_key", help="Your MoltMaze bot API key")
     parser.add_argument(
         "--base-url",
         default="https://moltmaze.com",
-        help="MoltMaze base URL. Default: https://moltmaze.com",
+        help="Base URL for MoltMaze",
     )
     parser.add_argument(
-        "--poll",
+        "--poll-seconds",
         type=float,
         default=0.15,
-        help="Seconds to sleep between successful turns. Default: 0.15",
+        help="Delay before reading the next state",
+    )
+    parser.add_argument(
+        "--move-delay",
+        type=float,
+        default=0.40,
+        help="Minimum delay between submitted moves",
     )
     parser.add_argument(
         "--force-new-run",
         action="store_true",
-        help="Ask start_run.php to force a new run instead of resuming.",
+        help="Request a new run instead of resuming",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
-        help="Print parsed state details when possible.",
+        help="Print debug responses",
     )
     return parser
 
 
+def _extract_answer(state: ParsedState, direction: str) -> str:
+    action = state.actions[direction]
+    equation = action.get("equation", "")
+    if not equation:
+        raise RuntimeError(f"No equation found for direction: {direction}")
+
+    solved = solve_equation(equation)
+    return solved
+
+
+def _load_initial_state(
+    client: MoltMazeClient,
+    force_new_run: bool,
+    debug: bool,
+) -> ParsedState:
+    start_payload = client.start_run(force_new_run=force_new_run)
+    if debug:
+        _print_debug("start_run response", start_payload)
+    return parse_state(start_payload)
+
 
 def main() -> int:
-    args = build_parser().parse_args()
-    client = MoltMazeClient(api_key=args.apikey, base_url=args.base_url)
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    client = MoltMazeClient(api_key=args.api_key, base_url=args.base_url)
 
     try:
-        try:
-            run_info = client.start_run(force_new_run=args.force_new_run)
-            console.print("[bold green]start_run response[/bold green]")
-            console.print(Pretty(run_info))
-        except Exception as exc:
-            console.print(f"[yellow]Warning:[/yellow] start_run failed: {exc}")
-            console.print("[yellow]Trying current_run and state anyway...[/yellow]")
+        state = _load_initial_state(
+            client=client,
+            force_new_run=args.force_new_run,
+            debug=args.debug,
+        )
 
-        turn_counter = 0
+        visited: dict[tuple[int, int], int] = {}
+        last_direction: str | None = None
+        last_submit_time = 0.0
+
         while True:
-            raw_state = client.get_state()
-            if args.debug:
-                console.print("[bold blue]raw state[/bold blue]")
-                console.print(Pretty(raw_state))
+            visited[state.position] = visited.get(state.position, 0) + 1
 
-            try:
-                state = parse_state(raw_state)
-            except StateParseError as exc:
-                console.print(f"[bold red]State parse error:[/bold red] {exc}")
-                if args.debug:
-                    console.print(Pretty(raw_state))
-                return 2
-
-            direction, expr, answer = choose_answer(state)
-            result = client.submit_move(state.run_id, answer)
-            turn_counter += 1
-
-            console.print(
-                f"[cyan]turn {turn_counter}[/cyan] "
-                f"dir=[bold]{direction}[/bold] "
-                f"expr=[magenta]{expr}[/magenta] "
-                f"answer=[green]{answer}[/green]"
+            direction = choose_direction(
+                state,
+                visited=visited,
+                last_direction=last_direction,
             )
-            console.print(Pretty(result))
+            answer = _extract_answer(state, direction)
 
-            if isinstance(result, dict):
-                status_text = str(result.get("status", "")).lower()
-                active_text = str(result.get("run_status", "")).lower()
-                if status_text in {"failed", "dead", "ended", "complete"}:
-                    console.print("[bold yellow]Run ended according to submit response.[/bold yellow]")
-                    return 0
-                if active_text in {"failed", "dead", "ended", "complete"}:
-                    console.print("[bold yellow]Run ended according to run status.[/bold yellow]")
-                    return 0
+            now = time.time()
+            elapsed = now - last_submit_time
+            if elapsed < args.move_delay:
+                time.sleep(args.move_delay - elapsed)
 
-            if args.poll > 0:
-                time.sleep(args.poll)
+            print(
+                f"run={state.run_id} pos={state.position} goal={state.goal} "
+                f"move={direction} answer={answer}"
+            )
+
+            submit_payload = client.submit_move(state.run_id, answer)
+            last_submit_time = time.time()
+
+            if args.debug:
+                _print_debug("submit_move response", submit_payload)
+
+            status = str(submit_payload.get("status", "")).lower()
+            if status in {"completed", "finished", "dead", "failed"}:
+                print(f"Run ended with status: {submit_payload.get('status')}")
+                return 0
+
+            predicted_next_position = apply_direction(state.position, direction)
+            last_direction = direction
+
+            time.sleep(max(args.poll_seconds, 0.0))
+
+            next_payload = client.get_state()
+            if args.debug:
+                _print_debug("get_state response", next_payload)
+
+            state = parse_state(next_payload)
+
+            if state.position != predicted_next_position and args.debug:
+                print(
+                    f"Note: predicted next position {predicted_next_position}, "
+                    f"actual position {state.position}"
+                )
 
     except KeyboardInterrupt:
-        console.print("\n[bold yellow]MazeSnek stopped by user.[/bold yellow]")
-        return 130
-    except httpx.HTTPError as exc:
-        console.print(f"[bold red]HTTP error:[/bold red] {exc}")
-        return 1
+        print("\nStopped.")
+        return 0
     except Exception as exc:
-        console.print(f"[bold red]Fatal error:[/bold red] {exc}")
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
     finally:
         client.close()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())
