@@ -1,222 +1,114 @@
 # MazeSnek
 
-MazeSnek is a command-line MoltMaze solver for Ubuntu Linux. It is meant to be installed on a small Linux box or Ubuntu VM and start solving mazes immediately with a valid MoltMaze API key.
+MazeSnek is a command-line MoltMaze solver for Python. It is meant to be easy to set up on either Ubuntu Linux or Windows and start solving mazes immediately with a valid MoltMaze API key.
 
 The main entry point is:
 
-```bash
-mazesnek <apikey>
-```
+    mazesnek <apikey>
 
-By default, MazeSnek talks to `https://moltmaze.com`, resumes the active run if one exists, or starts a run if it does not, then continuously:
+By default, MazeSnek talks to https://moltmaze.com, resumes the active run if one exists, or starts a run if it does not, then continuously:
 
-1. fetches fresh state,
-2. finds a path to the goal,
-3. chooses the next direction,
-4. solves the equation bound to that direction,
-5. submits the numeric answer,
-6. repeats until the run ends or you stop it.
+1. fetches fresh state
+2. chooses the next direction
+3. solves the equation bound to that direction
+4. submits the numeric answer
+5. repeats until the run ends or you stop it
 
-This matches how MoltMaze describes its bot flow and API surface.
+---
 
 ## Features
 
-- `mazesnek <apikey>` simple CLI
+- simple CLI: mazesnek <apikey>
 - starts or resumes automatically
-- BFS pathfinding to the goal
-- safe arithmetic solver for action equations
+- solves equations locally
 - readable terminal output
-- configurable base URL and poll interval
-- packaged as a normal Python project with a console script
+- configurable pacing and server
+- works on Ubuntu/Linux and Windows
 
-## MoltMaze endpoints used
+---
 
-MoltMaze documents these main endpoints:
+## Requirements
 
-- `api/start_run.php`
-- `api/current_run.php`
-- `api/get_state.php`
-- `api/submit_move.php`
+- Python 3.11+
+- Internet access
+- MoltMaze API key
 
-It also notes that action mappings can change every turn, so bots should fetch fresh state often.
+---
 
-## Ubuntu VM setup
+## Ubuntu / Linux setup
 
-These steps assume Ubuntu 24.04 LTS in VirtualBox, but they are also fine on a normal Ubuntu machine.
+Install packages:
 
-### 1. Install system packages
+    sudo apt update
+    sudo apt install -y python3 python3-pip python3-venv git
 
-```bash
-sudo apt update
-sudo apt install -y python3 python3-pip python3-venv git
-```
+Clone:
 
-### 2. Clone the repo
+    git clone https://github.com/YOURNAME/MazeSnek.git
+    cd MazeSnek
 
-```bash
-git clone https://github.com/YOURNAME/MazeSnek.git
-cd MazeSnek
-```
+Create venv:
 
-### 3. Create a virtual environment
+    python3 -m venv .venv
+    source .venv/bin/activate
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
+Install:
 
-### 4. Install MazeSnek
+    pip install -e .
 
-For development:
+Run:
 
-```bash
-pip install -e .
-```
+    mazesnek YOUR_API_KEY
 
-Or as a normal local install:
+---
 
-```bash
-pip install .
-```
+## Windows setup
 
-### 5. Run it
+Install Python (3.11+), enable "Add to PATH"
 
-```bash
-mazesnek YOUR_API_KEY
-```
+Check:
+
+    python --version
+
+Clone or extract project, then:
+
+    python -m venv .venv
+    .venv\Scripts\activate
+    pip install -e .
+
+Run:
+
+    mazesnek YOUR_API_KEY
+
+If command fails:
+
+    python -m mazesnek.cli YOUR_API_KEY
+
+---
 
 ## Usage
 
-### Simplest form
+Basic:
 
-```bash
-mazesnek YOUR_API_KEY
-```
+    mazesnek YOUR_API_KEY
 
-### Custom poll interval
+Slower safe pacing:
 
-```bash
-mazesnek YOUR_API_KEY --poll 0.15
-```
+    mazesnek YOUR_API_KEY --move-delay 0.8 --poll-seconds 0.1
 
-### Custom server
+Debug:
 
-```bash
-mazesnek YOUR_API_KEY --base-url https://moltmaze.com
-```
+    mazesnek YOUR_API_KEY --debug
 
-### Start a new run instead of resuming
+Force new run:
 
-```bash
-mazesnek YOUR_API_KEY --force-new-run
-```
+    mazesnek YOUR_API_KEY --force-new-run
 
-### Show raw state parsing details
-
-```bash
-mazesnek YOUR_API_KEY --debug
-```
-
-## Getting an API key
-
-MoltMaze says you create a bot profile and receive the API key once, and that key is then used for starting runs, reading state, and submitting moves.
-
-Example registration call from MoltMaze:
-
-```bash
-curl -X POST https://moltmaze.com/api/register_bot.php \
-  -H "Content-Type: application/json" \
-  -d '{"name":"my-bot-name"}'
-```
-
-## How MazeSnek works
-
-MazeSnek expects the MoltMaze state endpoint to include, in some form:
-
-- current maze/grid
-- current position
-- goal position
-- current action equations
-- run identifier
-
-The homepage explains that the state payload includes run status, current position, goal position, maze size, score, current action equations, and maze data.
-
-The parser in this package is intentionally tolerant and tries several common key names so it can survive small API naming changes.
-
-## Example workflow
-
-```bash
-mazesnek YOUR_API_KEY --poll 0.10
-```
-
-Typical loop:
-
-- call `start_run.php`
-- call `get_state.php`
-- pathfind to the goal
-- solve the equation for the chosen move
-- call `submit_move.php`
-- repeat
-
-## Running as a persistent service on Ubuntu
-
-Create a user service:
-
-```bash
-mkdir -p ~/.config/systemd/user
-nano ~/.config/systemd/user/mazesnek.service
-```
-
-Paste:
-
-```ini
-[Unit]
-Description=MazeSnek MoltMaze solver
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=%h/MazeSnek
-ExecStart=%h/MazeSnek/.venv/bin/mazesnek YOUR_API_KEY --poll 0.15
-Restart=always
-RestartSec=2
-
-[Install]
-WantedBy=default.target
-```
-
-Then enable it:
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now mazesnek.service
-loginctl enable-linger "$USER"
-```
-
-Watch logs:
-
-```bash
-journalctl --user -u mazesnek.service -f
-```
-
-## Project layout
-
-```text
-MazeSnek/
-├── README.md
-├── pyproject.toml
-└── mazesnek/
-    ├── __init__.py
-    ├── cli.py
-    ├── client.py
-    ├── pathfinding.py
-    ├── solver.py
-    └── state.py
-```
+---
 
 ## Notes
 
-- MazeSnek is designed for legitimate play against MoltMaze using the documented bot API.
-- The parser is flexible, but if the live API shape changes substantially you may need to adjust `mazesnek/state.py`.
-- Very stale state can cause wrong submissions because MoltMaze rebinds equations every turn. That behavior is documented on the homepage.
+- Uses MoltMaze API endpoints
+- Solves equations locally
+- Respects server rate limits via --move-delay
+- Adjust state parser if API changes
