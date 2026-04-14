@@ -22,21 +22,33 @@ _OPPOSITE_DIRECTION: dict[str, str] = {
 @dataclass
 class ParsedState:
     run_id: int
+    level: int
+    turn: int
     position: tuple[int, int]
     goal: tuple[int, int]
+    maze_size: tuple[int, int] | None
     actions: dict[str, dict[str, Any]]
     raw_payload: dict[str, Any]
 
 
 def _parse_xy(value: Any, label: str) -> tuple[int, int]:
-    if isinstance(value, dict):
-        if "x" in value and "y" in value:
-            return int(value["x"]), int(value["y"])
+    if isinstance(value, dict) and "x" in value and "y" in value:
+        return int(value["x"]), int(value["y"])
 
     if isinstance(value, (list, tuple)) and len(value) >= 2:
         return int(value[0]), int(value[1])
 
     raise ValueError(f"{label} was missing or invalid")
+
+
+def _parse_maze_size(value: Any) -> tuple[int, int] | None:
+    if isinstance(value, dict) and "width" in value and "height" in value:
+        return int(value["width"]), int(value["height"])
+
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        return int(value[0]), int(value[1])
+
+    return None
 
 
 def _normalize_actions(actions: Any) -> dict[str, dict[str, Any]]:
@@ -73,16 +85,14 @@ def parse_state(payload: dict[str, Any]) -> ParsedState:
     if not isinstance(payload, dict):
         raise ValueError("State payload was not an object")
 
-    run_id = int(payload.get("run_id", 0))
-    position = _parse_xy(payload.get("position"), "position")
-    goal = _parse_xy(payload.get("goal"), "goal")
-    actions = _normalize_actions(payload.get("actions"))
-
     return ParsedState(
-        run_id=run_id,
-        position=position,
-        goal=goal,
-        actions=actions,
+        run_id=int(payload.get("run_id", 0)),
+        level=int(payload.get("level", 1)),
+        turn=int(payload.get("turn", 0)),
+        position=_parse_xy(payload.get("position"), "position"),
+        goal=_parse_xy(payload.get("goal"), "goal"),
+        maze_size=_parse_maze_size(payload.get("maze_size")),
+        actions=_normalize_actions(payload.get("actions")),
         raw_payload=payload,
     )
 
@@ -92,37 +102,23 @@ def apply_direction(position: tuple[int, int], direction: str) -> tuple[int, int
     return (position[0] + dx, position[1] + dy)
 
 
-def choose_direction(
-    state: ParsedState,
-    visited: dict[tuple[int, int], int] | None = None,
-    last_direction: str | None = None,
-) -> str:
-    traversable = [
-        direction
-        for direction, info in state.actions.items()
-        if info.get("traversable", False)
-    ]
+def direction_between(a: tuple[int, int], b: tuple[int, int]) -> str:
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
 
-    if not traversable:
-        raise RuntimeError("No traversable directions were available")
+    for direction, (vx, vy) in _DIRECTION_VECTORS.items():
+        if (dx, dy) == (vx, vy):
+            return direction
 
-    visited = visited or {}
+    raise ValueError(f"Positions are not adjacent: {a!r} -> {b!r}")
 
-    px, py = state.position
-    gx, gy = state.goal
 
-    def score(direction: str) -> tuple[int, int, int, int]:
-        nx, ny = apply_direction((px, py), direction)
-        visit_count = visited.get((nx, ny), 0)
-        manhattan = abs(gx - nx) + abs(gy - ny)
+def opposite_direction(direction: str) -> str:
+    return _OPPOSITE_DIRECTION[direction]
 
-        reverse_penalty = 0
-        if last_direction and _OPPOSITE_DIRECTION.get(last_direction) == direction:
-            reverse_penalty = 1
 
-        tie_break = ("up", "right", "down", "left").index(direction)
-
-        return (visit_count, reverse_penalty, manhattan, tie_break)
-
-    traversable.sort(key=score)
-    return traversable[0]
+def cardinal_neighbors(position: tuple[int, int]) -> dict[str, tuple[int, int]]:
+    return {
+        direction: (position[0] + dx, position[1] + dy)
+        for direction, (dx, dy) in _DIRECTION_VECTORS.items()
+    }
