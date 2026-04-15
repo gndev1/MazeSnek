@@ -1,114 +1,234 @@
 # MazeSnek
 
-MazeSnek is a command-line MoltMaze solver for Python. It is meant to be easy to set up on either Ubuntu Linux or Windows and start solving mazes immediately with a valid MoltMaze API key.
+MazeSnek is a command-line bot for **MoltMaze** and a clean open-source reference implementation for developers who want to study, fork, and build their own bots.
 
-The main entry point is:
+It is designed to be:
 
-    mazesnek <apikey>
+- easy to install
+- easy to run
+- easy to read
+- easy to modify
 
-By default, MazeSnek talks to https://moltmaze.com, resumes the active run if one exists, or starts a run if it does not, then continuously:
-
-1. fetches fresh state
-2. chooses the next direction
-3. solves the equation bound to that direction
-4. submits the numeric answer
-5. repeats until the run ends or you stop it
+For a full walkthrough, see **GETTING_STARTED.md**
 
 ---
 
 ## Features
 
-- simple CLI: mazesnek <apikey>
-- starts or resumes automatically
-- solves equations locally
-- readable terminal output
-- configurable pacing and server
-- works on Ubuntu/Linux and Windows
+- command-line MoltMaze bot
+- automatic run start/resume
+- BFS-based pathfinding
+- deterministic equation solver
+- structured debug output
+- modular architecture for extension
 
 ---
 
 ## Requirements
 
-- Python 3.11+
-- Internet access
-- MoltMaze API key
+- Python 3.10+
+- pip
+- venv
+- git
 
 ---
 
-## Ubuntu / Linux setup
+# Install on Linux / Ubuntu
 
-Install packages:
+```bash
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv git
 
-    sudo apt update
-    sudo apt install -y python3 python3-pip python3-venv git
+git clone https://github.com/YOURNAME/MazeSnek.git
+cd MazeSnek
 
-Clone:
+python3 -m venv .venv
+source .venv/bin/activate
 
-    git clone https://github.com/YOURNAME/MazeSnek.git
-    cd MazeSnek
-
-Create venv:
-
-    python3 -m venv .venv
-    source .venv/bin/activate
-
-Install:
-
-    pip install -e .
-
-Run:
-
-    mazesnek YOUR_API_KEY
+pip install --upgrade pip
+pip install -e .
+```
 
 ---
 
-## Windows setup
+# Install on Windows
 
-Install Python (3.11+), enable "Add to PATH"
+⚠️ Always run commands from the project root (the folder containing `pyproject.toml`)
 
-Check:
+## Create virtual environment
 
-    python --version
+```bat
+py -m venv .venv
+```
 
-Clone or extract project, then:
+## Activate
 
-    python -m venv .venv
-    .venv\Scripts\activate
-    pip install -e .
+### Command Prompt (cmd.exe)
 
-Run:
+```bat
+.venv\Scripts\activate
+```
 
-    mazesnek YOUR_API_KEY
+### PowerShell
 
-If command fails:
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
 
-    python -m mazesnek.cli YOUR_API_KEY
+## Install
 
----
-
-## Usage
-
-Basic:
-
-    mazesnek YOUR_API_KEY
-
-Slower safe pacing:
-
-    mazesnek YOUR_API_KEY --move-delay 0.8 --poll-seconds 0.1
-
-Debug:
-
-    mazesnek YOUR_API_KEY --debug
-
-Force new run:
-
-    mazesnek YOUR_API_KEY --force-new-run
+```bat
+pip install --upgrade pip
+pip install -e .
+```
 
 ---
 
-## Notes
+# Running MazeSnek
 
-- Uses MoltMaze API endpoints
-- Solves equations locally
-- Respects server rate limits via --move-delay
-- Adjust state parser if API changes
+```bash
+mazesnek YOUR_API_KEY
+```
+
+If the command is not recognized:
+
+```bash
+python -m mazesnek.cli YOUR_API_KEY
+```
+
+---
+
+# Debug Mode
+
+```bash
+mazesnek YOUR_API_KEY --debug
+```
+
+Shows:
+
+- run / level / turn
+- position / goal
+- chosen direction
+- equation text
+- computed answer
+- server response
+
+---
+
+# Common Arguments
+
+## Custom server
+
+```bash
+mazesnek YOUR_API_KEY --base-url https://moltmaze.com
+```
+
+## Poll rate
+
+```bash
+mazesnek YOUR_API_KEY --poll-seconds 0.15
+```
+
+## Force new run
+
+```bash
+mazesnek YOUR_API_KEY --force-new-run
+```
+
+---
+
+# Getting an API Key
+
+```bash
+curl -X POST https://moltmaze.com/api/register_bot.php \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-bot"}'
+```
+
+---
+
+# Common Issues (Windows)
+
+## 1. 'mazesnek not recognized'
+
+Use:
+
+```bat
+python -m mazesnek.cli YOUR_API_KEY
+```
+
+---
+
+## 2. After reboot
+
+```bat
+cd path\to\MazeSnek
+.venv\Scripts\activate
+```
+
+---
+
+## 3. Broken environment
+
+```bat
+rmdir /s /q .venv
+py -m venv .venv
+.venv\Scripts\activate
+pip install -e .
+```
+
+---
+
+## 4. Running from wrong folder
+
+❌ Wrong:
+```
+MazeSnek\mazesnek\
+```
+
+✅ Correct:
+```
+MazeSnek\
+```
+
+---
+
+# Project Layout
+
+```
+MazeSnek/
+├── README.md
+├── GETTING_STARTED.md
+├── pyproject.toml
+└── mazesnek/
+    ├── cli.py
+    ├── client.py
+    ├── solver.py
+    ├── pathfinding.py
+    └── state.py
+```
+
+---
+
+# Development Notes
+
+MazeSnek is intentionally simple and designed to be extended.
+
+Key areas to improve:
+
+- smarter pathfinding
+- heuristic weighting
+- equation solving optimizations
+- adaptive retry logic
+
+---
+
+# Summary
+
+MazeSnek is a working reference bot.
+
+If something breaks:
+- it is usually environment setup
+- or server-side challenge behavior
+
+Use debug mode to inspect behavior and iterate quickly.
