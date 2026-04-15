@@ -10,10 +10,11 @@ class MoltMazeClient:
         self.api_key = api_key.strip()
         self.client = httpx.Client(
             base_url=base_url.rstrip("/"),
-            timeout=15.0,
+            timeout=20.0,
             headers={
                 "Accept": "application/json",
                 "User-Agent": "MazeSnek/0.1.0",
+                "X-API-Key": self.api_key,
             },
         )
 
@@ -23,12 +24,10 @@ class MoltMazeClient:
     def start_run(self, force_new_run: bool = False) -> dict[str, Any]:
         params: dict[str, Any] = {"api_key": self.api_key}
         if force_new_run:
+            params["force_new"] = "1"
             params["force_new_run"] = "1"
 
-        response = self.client.post(
-            "/api/start_run.php",
-            params=params,
-        )
+        response = self.client.post("/api/start_run.php", params=params)
         response.raise_for_status()
         return response.json()
 
@@ -40,11 +39,14 @@ class MoltMazeClient:
         response.raise_for_status()
         return response.json()
 
-    def get_state(self) -> dict[str, Any]:
-        response = self.client.get(
-            "/api/get_state.php",
-            params={"api_key": self.api_key},
-        )
+    def get_state(self, include_debug: bool = False, run_id: int | None = None) -> dict[str, Any]:
+        params: dict[str, Any] = {"api_key": self.api_key}
+        if run_id is not None:
+            params["run_id"] = run_id
+        if include_debug:
+            params["include_debug"] = "1"
+
+        response = self.client.get("/api/get_state.php", params=params)
         response.raise_for_status()
         return response.json()
 

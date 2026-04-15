@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -23,6 +24,7 @@ class MazeMemory:
     blocked_edges: set[Edge] = field(default_factory=set)
     observed_tiles: set[tuple[int, int]] = field(default_factory=set)
     visit_counts: dict[tuple[int, int], int] = field(default_factory=lambda: defaultdict(int))
+    current_chunk: tuple[int, int] | None = None
 
     def reset(self, run_id: int | None, level: int | None, maze_size: tuple[int, int] | None = None) -> None:
         self.run_id = run_id
@@ -33,12 +35,16 @@ class MazeMemory:
         self.blocked_edges.clear()
         self.observed_tiles.clear()
         self.visit_counts.clear()
+        self.current_chunk = None
 
     def maybe_reset_for_state(self, state: ParsedState) -> None:
+        effective_maze_size = state.world_size or state.maze_size
         if self.run_id != state.run_id or self.level != state.level:
-            self.reset(state.run_id, state.level, state.maze_size)
-        elif state.maze_size is not None:
-            self.maze_size = state.maze_size
+            self.reset(state.run_id, state.level, effective_maze_size)
+        elif effective_maze_size is not None:
+            self.maze_size = effective_maze_size
+
+        self.current_chunk = state.chunk
 
     def in_bounds(self, pos: tuple[int, int]) -> bool:
         if pos[0] < 0 or pos[1] < 0:
